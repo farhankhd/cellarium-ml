@@ -74,8 +74,7 @@ class llomics(BaseModule, PredictMixin):
 
     def bin_gene_expressions(self, x_ng: torch.Tensor) -> torch.Tensor:
         bin_count = 10  # or however many bins you need
-        bin_edges = torch.linspace(x_ng.min(), x_ng.max(), bin_count + 1)
-        bin_edges = bin_edges.to(x_ng.device)
+        bin_edges = torch.linspace(x_ng.min(), x_ng.max(), bin_count + 1, device=x_ng.device)
         bin_indices = torch.bucketize(x_ng, bin_edges, right=False) - 1
         return bin_indices
 
