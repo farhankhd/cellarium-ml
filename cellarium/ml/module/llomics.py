@@ -48,6 +48,8 @@ class llomics(BaseModule, PredictMixin):
         self.transform = transform
         self.validate_input = validate_input
         self.feature_ids: torch.Tensor
+        bin_count = 10  # or however many bins you need
+        self.bin_edges = torch.linspace(0, 100, bin_count + 1)
         # ids for the features, 0 is for padding, 1 is for mask
         self.register_buffer("feature_ids", torch.arange(2, len(feature_schema) + 2))
 
