@@ -85,7 +85,7 @@ class llomics(BaseModule, PredictMixin):
         """
         # Flatten the tensor to perform quantization
         print(x_ng)
-        print(x_ng.shape)
+        print(type(x_ng))
         flat_x_ng = x_ng.flatten()
 
 
