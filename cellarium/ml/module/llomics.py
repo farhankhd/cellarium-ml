@@ -15,11 +15,6 @@ class llomics(BaseModule, PredictMixin):
     """
     llomics model.
 
-    **References:**
-
-    1. `Transfer learning enables predictions in network biology (Theodoris et al.)
-       <https://www.nature.com/articles/s41586-023-06139-9>`_.
-
     Args:
         feature_schema:
             The list of the variable names in the input data.
@@ -69,14 +64,7 @@ class llomics(BaseModule, PredictMixin):
         attention_mask = sorted_x_ng != 0
         # pad genes with zero expression
         input_ids[~attention_mask] = 0
-        return input_ids, attention_mask
-
-
-    def bin_gene_expressions(self, x_ng: torch.Tensor) -> torch.Tensor:
-        bin_count = 10  # or however many bins you need
-        bin_edges = torch.linspace(x_ng.min(), x_ng.max(), bin_count + 1, device=x_ng.device)
-        bin_indices = torch.bucketize(x_ng, bin_edges, right=False) - 1
-        return bin_indices
+        return input_ids, attention_mask, sorted_x_ng
 
 
     def forward(self, x_ng: torch.Tensor, **kwargs: Any) -> torch.Tensor:
@@ -87,14 +75,11 @@ class llomics(BaseModule, PredictMixin):
             assert x_ng.shape[1] == len(feature_list), "The number of x_ng columns must match the feature_list length."
             assert np.array_equal(feature_list, self.feature_schema), "feature_list must match the feature_schema."
 
-        # Bin the gene expressions to use as token types
-        token_type_ids = self.bin_gene_expressions(x_ng)
-
-
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        input_ids, attention_mask = self.tokenize(x_ng, feature_list)
+        # Extract sorted_x_ng from the tokenize function
+        input_ids, attention_mask, sorted_x_ng = self.tokenize(x_ng, feature_list)
 
         labels = input_ids.clone()
         labels_probs = torch.full(labels.shape, self.mlm_probability, device=x_ng.device)
@@ -115,13 +100,15 @@ class llomics(BaseModule, PredictMixin):
         random_words = torch.randint(x_ng.shape[1], labels.shape, dtype=torch.long, device=x_ng.device)
         input_ids[indices_random] = random_words[indices_random]
 
+        # Pass the sorted_x_ng as token_type_ids to the model
         output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,  # Add the token_type_ids here
             labels=labels,
+            token_type_ids=sorted_x_ng  # Added token_type_ids
         )
         return output.loss
+
 
 
     def predict(self, x_ng: torch.Tensor, **kwargs: Any) -> dict[str, torch.Tensor | None]:
@@ -134,18 +121,16 @@ class llomics(BaseModule, PredictMixin):
             assert x_ng.shape[1] == len(feature_list), "The number of x_ng columns must match the feature_list length."
             assert np.array_equal(feature_list, self.feature_schema), "feature_list must match the feature_schema."
 
-        # Bin the gene expressions to use as token types
-        token_type_ids = self.bin_gene_expressions(x_ng)
-
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        input_ids, attention_mask = self.tokenize(x_ng, feature_list)
+        # Extract sorted_x_ng from the tokenize function
+        input_ids, attention_mask, sorted_x_ng = self.tokenize(x_ng, feature_list)
 
         output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,  # Add the token_type_ids here
+            token_type_ids=sorted_x_ng,  # Passing sorted_x_ng as token_type_ids
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
