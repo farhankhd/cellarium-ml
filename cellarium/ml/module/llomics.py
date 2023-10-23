@@ -48,8 +48,6 @@ class llomics(BaseModule, PredictMixin):
         self.transform = transform
         self.validate_input = validate_input
         self.feature_ids: torch.Tensor
-        bin_count = 10  # or however many bins you need
-        self.bin_edges = torch.linspace(0, 100, bin_count + 1)
         # ids for the features, 0 is for padding, 1 is for mask
         self.register_buffer("feature_ids", torch.arange(2, len(feature_schema) + 2))
 
@@ -75,21 +73,9 @@ class llomics(BaseModule, PredictMixin):
 
 
     def bin_gene_expressions(self, x_ng: torch.Tensor) -> torch.Tensor:
-        """
-        Bins gene expressions into discrete categories.
-
-        Args:
-            x_ng: A tensor containing gene expressions. Shape: [batch_size, num_genes]
-
-        Returns:
-            A tensor with binned gene expression values. Shape: [batch_size, num_genes]
-        """
-        # Since we're only dealing with the binning here, we'll use the bin_edges attribute.
-        # This assumes that self.bin_edges is already defined elsewhere in your class 
-        # (probably during initialization).
-
-        # Convert continuous values to bin indices
-        bin_indices = torch.bucketize(x_ng, self.bin_edges, right=False) - 1
+        bin_count = 10  # or however many bins you need
+        bin_edges = torch.linspace(x_ng.min(), x_ng.max(), bin_count + 1)
+        bin_indices = torch.bucketize(x_ng, bin_edges, right=False) - 1
         return bin_indices
 
 
