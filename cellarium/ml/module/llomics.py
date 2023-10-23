@@ -84,7 +84,7 @@ class llomics(BaseModule, PredictMixin):
             A tensor with binned gene expression values. Shape: [batch_size, num_genes]
         """
         # Flatten the tensor to perform quantization
-        print(x.ng)
+        print(x_ng)
         print(x_ng.shape)
         flat_x_ng = x_ng.flatten()
 
