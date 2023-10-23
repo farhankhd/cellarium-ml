@@ -85,10 +85,9 @@ class llomics(BaseModule, PredictMixin):
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        # Extract sorted_x_ng from the tokenize function
-        input_ids, attention_mask, sorted_x_ng = self.tokenize(x_ng, feature_list)
+        combined_input_ids, attention_mask = self.tokenize(x_ng, feature_list)
 
-        labels = input_ids.clone()
+        labels = combined_input_ids.clone()
         labels_probs = torch.full(labels.shape, self.mlm_probability, device=x_ng.device)
         labels_probs[~attention_mask] = 0
         masked_indices = torch.bernoulli(labels_probs).bool()
@@ -96,7 +95,7 @@ class llomics(BaseModule, PredictMixin):
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8, device=x_ng.device)).bool() & masked_indices
-        input_ids[indices_replaced] = 1  # tokenizer.mask_token_id
+        combined_input_ids[indices_replaced] = 1  # tokenizer.mask_token_id
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = (
@@ -104,15 +103,13 @@ class llomics(BaseModule, PredictMixin):
             & masked_indices
             & ~indices_replaced
         )
-        random_words = torch.randint(x_ng.shape[1], labels.shape, dtype=torch.long, device=x_ng.device)
-        input_ids[indices_random] = random_words[indices_random]
+        random_words = torch.randint(2 * x_ng.shape[1], labels.shape, dtype=torch.long, device=x_ng.device)  # Notice the change in the randint size
+        combined_input_ids[indices_random] = random_words[indices_random]
 
-        # Pass the sorted_x_ng as token_type_ids to the model
         output = self.model(
-            input_ids=input_ids,
+            input_ids=combined_input_ids,
             attention_mask=attention_mask,
             labels=labels,
-            token_type_ids=sorted_x_ng  # Added token_type_ids
         )
         return output.loss
 
@@ -131,13 +128,11 @@ class llomics(BaseModule, PredictMixin):
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        # Extract sorted_x_ng from the tokenize function
-        input_ids, attention_mask, sorted_x_ng = self.tokenize(x_ng, feature_list)
+        combined_input_ids, attention_mask = self.tokenize(x_ng, feature_list)
 
         output = self.model(
-            input_ids=input_ids,
+            input_ids=combined_input_ids,
             attention_mask=attention_mask,
-            token_type_ids=sorted_x_ng,  # Passing sorted_x_ng as token_type_ids
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
