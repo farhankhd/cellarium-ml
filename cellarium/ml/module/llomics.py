@@ -71,6 +71,38 @@ class llomics(BaseModule, PredictMixin):
         input_ids[~attention_mask] = 0
         return input_ids, attention_mask
 
+
+    def bin_gene_expressions(x_ng: torch.Tensor, num_bins: int = 10) -> torch.Tensor:
+        """
+        Bins gene expressions into discrete categories.
+
+        Args:
+            x_ng: A tensor containing gene expressions. Shape: [batch_size, num_genes]
+            num_bins: Number of bins to categorize the expressions into.
+
+        Returns:
+            A tensor with binned gene expression values. Shape: [batch_size, num_genes]
+        """
+        # Flatten the tensor to perform quantization
+        print(x.ng)
+        print(x_ng.shape)
+        flat_x_ng = x_ng.flatten()
+
+
+        # Determine bin edges
+        bin_edges = torch.linspace(flat_x_ng.min(), flat_x_ng.max(), num_bins + 1)
+
+        # Convert continuous values to bin indices
+        binned_x_ng = torch.bucketize(flat_x_ng, bin_edges)
+
+        # Reshape to the original shape
+        binned_x_ng = binned_x_ng.reshape(x_ng.shape)
+        print(binned_x_ng)
+        print(binned_x_ng.shape)
+
+        return binned_x_ng
+
+
     def forward(self, x_ng: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         assert "feature_list" in kwargs, "feature_list must be provided."
         feature_list: Sequence = kwargs.pop("feature_list")
@@ -78,6 +110,10 @@ class llomics(BaseModule, PredictMixin):
         if self.validate_input:
             assert x_ng.shape[1] == len(feature_list), "The number of x_ng columns must match the feature_list length."
             assert np.array_equal(feature_list, self.feature_schema), "feature_list must match the feature_schema."
+
+        # Bin the gene expressions to use as token types
+        token_type_ids = self.bin_gene_expressions(x_ng)
+
 
         if self.transform is not None:
             x_ng = self.transform(x_ng)
@@ -106,9 +142,11 @@ class llomics(BaseModule, PredictMixin):
         output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,  # Add the token_type_ids here
             labels=labels,
         )
         return output.loss
+
 
     def predict(self, x_ng: torch.Tensor, **kwargs: Any) -> dict[str, torch.Tensor | None]:
         assert "feature_list" in kwargs, "feature_list must be provided."
@@ -120,6 +158,9 @@ class llomics(BaseModule, PredictMixin):
             assert x_ng.shape[1] == len(feature_list), "The number of x_ng columns must match the feature_list length."
             assert np.array_equal(feature_list, self.feature_schema), "feature_list must match the feature_schema."
 
+        # Bin the gene expressions to use as token types
+        token_type_ids = self.bin_gene_expressions(x_ng)
+
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
@@ -128,6 +169,7 @@ class llomics(BaseModule, PredictMixin):
         output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,  # Add the token_type_ids here
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 import torch
 from transformers import BertConfig, BertForMaskedLM
+from transformers import PreTrainedTokenizer, AddedToken
 
 from cellarium.ml.transforms import DivideByScale, NormalizeTotal, ZScoreLog1pNormalize
 
@@ -266,6 +267,64 @@ class GeneformerFromCLI(Geneformer):
             validate_input=validate_input,
         )
 
+class GeneTokenizer(PreTrainedTokenizer):
+    def __init__(self, vocab, pad_token="<PAD>", mask_token="<MASK>", unk_token="<UNK>", **kwargs):
+        self.pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
+        self.mask_token = AddedToken(mask_token, rstrip=True, lstrip=True)
+        self.unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
+        self.vocab = [pad_token, mask_token, "<UNK>"] + vocab
+        self.idx2token = {i: token for i, token in enumerate(self.vocab)}
+        self.token2idx = {token: i for i, token in enumerate(self.vocab)}
+
+        super().__init__(
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+    def get_vocab(self):
+        vocab = dict(self.token2idx, **self.added_tokens_encoder)
+        return vocab
+
+    def _tokenize(self, text):
+        return [token.strip() for token in text.split(',')]
+
+    def _convert_token_to_id(self, token):
+        return self.token2idx.get(token, self.token2idx["<UNK>"])
+
+    def _convert_id_to_token(self, index):
+        return self.idx2token.get(index, "<UNK>")
+
+    def convert_tokens_to_string(self, tokens):
+        return ', '.join(tokens)
+
+    def tokenize(self, text, **kwargs):
+        return self._tokenize(text)
+
+    def convert_tokens_to_ids(self, tokens):
+        if isinstance(tokens, str):
+            return self._convert_token_to_id(tokens)
+        return [self._convert_token_to_id(token) for token in tokens]
+
+    def convert_ids_to_tokens(self, ids):
+        if isinstance(ids, int):
+            return self._convert_id_to_token(ids)
+        return [self._convert_id_to_token(index) for index in ids]
+
+    @property
+    def pad_token_id(self):
+        return self.token2idx[self.pad_token]
+
+    @property
+    def mask_token_id(self):
+        return self.token2idx[self.mask_token]
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.vocab)
+
+
 
 class llomicsFromCLI(llomics):
     """
@@ -312,7 +371,8 @@ class llomicsFromCLI(llomics):
         validate_input:
             If ``True`` the input data is validated.
     """
-
+    
+    
     def __init__(
         self,
         feature_schema: Sequence,
