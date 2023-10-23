@@ -136,6 +136,7 @@ def geneformer(args: ArgsType = None) -> None:
     cli(args=args)
 
 
+
 @register_model
 def incremental_pca(args: ArgsType = None) -> None:
     r"""
@@ -319,6 +320,40 @@ def tdigest(args: ArgsType = None) -> None:
         trainer_defaults={
             "max_epochs": 1,  # one pass
         },
+    )
+    cli(args=args)
+
+@register_model
+def llomics(args: ArgsType = None) -> None:
+    r"""
+    CLI to run the :class:`cellarium.ml.module.llomicsFromCLI` model.
+
+    This example shows how to fit feature count data to the llomics model [1].
+
+    Example run::
+
+        cellarium-ml llomics fit \
+            --data.filenames "gs://dsp-cellarium-cas-public/test-data/test_{0..3}.h5ad" \
+            --data.shard_size 100 \
+            --data.max_cache_size 2 \
+            --data.batch_size 5 \
+            --data.num_workers 1 \
+            --trainer.accelerator gpu \
+            --trainer.devices 1 \
+            --trainer.default_root_dir runs/llomics \
+            --trainer.max_steps 10
+
+    **References:**
+
+    1. `Transfer learning enables predictions in network biology (Theodoris et al.)
+       <https://www.nature.com/articles/s41586-023-06139-9>`_.
+
+    Args:
+        args: Arguments to parse. If ``None`` the arguments are taken from ``sys.argv``.
+    """
+    cli = lightning_cli_factory(
+        "cellarium.ml.module.llomicsFromCLI",
+        link_arguments=[("data.var_names", "model.module.init_args.feature_schema")],
     )
     cli(args=args)
 

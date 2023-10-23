@@ -189,6 +189,7 @@ class DistributedAnnDataCollection(AnnCollection):
         self.cache_size_strictly_enforced = cache_size_strictly_enforced
         # schema
         adata0 = self.cache[self.filenames[0]] = read_h5ad_file(self.filenames[0])
+        print(limits)
         assert len(adata0) == limits[0]
         self.schema = AnnDataSchema(adata0, obs_columns)
         # lazy anndatas

@@ -4,6 +4,7 @@
 from .base_module import BaseModule, BasePyroModule, PredictMixin
 from .from_cli import (
     GeneformerFromCLI,
+    llomicsFromCLI,
     IncrementalPCAFromCLI,
     OnePassMeanVarStdFromCLI,
     ProbabilisticPCAFromCLI,
@@ -11,6 +12,7 @@ from .from_cli import (
 )
 from .gather import GatherLayer
 from .geneformer import Geneformer
+from .llomics import llomics
 from .incremental_pca import IncrementalPCA
 from .onepass_mean_var_std import OnePassMeanVarStd
 from .probabilistic_pca import ProbabilisticPCA
@@ -22,6 +24,8 @@ __all__ = [
     "GatherLayer",
     "Geneformer",
     "GeneformerFromCLI",
+    "llomicsFromCLI"
+    "llomics",
     "IncrementalPCA",
     "IncrementalPCAFromCLI",
     "OnePassMeanVarStd",
