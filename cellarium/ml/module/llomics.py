@@ -54,17 +54,24 @@ class llomics(BaseModule, PredictMixin):
 
     def tokenize(self, x_ng: torch.Tensor, feature_list: Sequence) -> tuple[torch.Tensor, torch.Tensor]:
         tokens = self.feature_ids.expand(x_ng.shape)
-        # sort by median-scaled gene values
         sorted_indices = torch.argsort(x_ng, dim=1, descending=True)
         sorted_indices = sorted_indices[:, : self.model.config.max_position_embeddings]
+        
         ndx = torch.arange(x_ng.shape[0], device=x_ng.device)
         input_ids = tokens[ndx[:, None], sorted_indices]
-        # mask out genes with zero expression
-        sorted_x_ng = x_ng[ndx[:, None], sorted_indices]
-        attention_mask = sorted_x_ng != 0
-        # pad genes with zero expression
-        input_ids[~attention_mask] = 0
-        return input_ids, attention_mask, sorted_x_ng
+
+        sorted_x_ng_rowwise = x_ng[ndx[:, None], sorted_indices]
+        # Convert gene expression values to Long type for tokenization
+        token_type_ids = sorted_x_ng_rowwise.long()
+
+        # Now stack the tokens and the gene expression values
+        combined_input_ids = torch.stack((input_ids, token_type_ids), dim=-1).view(x_ng.shape[0], -1)
+
+        attention_mask = sorted_x_ng_rowwise != 0
+        attention_mask = torch.repeat_interleave(attention_mask, 2, dim=-1)  # Adjusted for combined input
+
+        return combined_input_ids, attention_mask
+
 
 
     def forward(self, x_ng: torch.Tensor, **kwargs: Any) -> torch.Tensor:
