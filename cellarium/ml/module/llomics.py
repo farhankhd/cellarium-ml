@@ -72,35 +72,23 @@ class llomics(BaseModule, PredictMixin):
         return input_ids, attention_mask
 
 
-    def bin_gene_expressions(x_ng: torch.Tensor, num_bins: int = 10) -> torch.Tensor:
+    def bin_gene_expressions(self, x_ng: torch.Tensor) -> torch.Tensor:
         """
         Bins gene expressions into discrete categories.
 
         Args:
             x_ng: A tensor containing gene expressions. Shape: [batch_size, num_genes]
-            num_bins: Number of bins to categorize the expressions into.
 
         Returns:
             A tensor with binned gene expression values. Shape: [batch_size, num_genes]
         """
-        # Flatten the tensor to perform quantization
-        print(x_ng)
-        print(type(x_ng))
-        flat_x_ng = x_ng.flatten()
-
-
-        # Determine bin edges
-        bin_edges = torch.linspace(flat_x_ng.min(), flat_x_ng.max(), num_bins + 1)
+        # Since we're only dealing with the binning here, we'll use the bin_edges attribute.
+        # This assumes that self.bin_edges is already defined elsewhere in your class 
+        # (probably during initialization).
 
         # Convert continuous values to bin indices
-        binned_x_ng = torch.bucketize(flat_x_ng, bin_edges)
-
-        # Reshape to the original shape
-        binned_x_ng = binned_x_ng.reshape(x_ng.shape)
-        print(binned_x_ng)
-        print(binned_x_ng.shape)
-
-        return binned_x_ng
+        bin_indices = torch.bucketize(x_ng, self.bin_edges, right=False) - 1
+        return bin_indices
 
 
     def forward(self, x_ng: torch.Tensor, **kwargs: Any) -> torch.Tensor:
