@@ -52,25 +52,34 @@ class llomics(BaseModule, PredictMixin):
         feature_list = tensor_dict["var_names"]
         return (x,), {"feature_list": feature_list}
 
-    def tokenize(self, x_ng: torch.Tensor, feature_list: Sequence) -> tuple[torch.Tensor, torch.Tensor]:
+    def tokenize(self, x_ng: torch.Tensor, feature_list: Sequence) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         tokens = self.feature_ids.expand(x_ng.shape)
         sorted_indices = torch.argsort(x_ng, dim=1, descending=True)
         sorted_indices = sorted_indices[:, : self.model.config.max_position_embeddings]
-        
+
         ndx = torch.arange(x_ng.shape[0], device=x_ng.device)
         input_ids = tokens[ndx[:, None], sorted_indices]
+        sorted_x_ng = x_ng[ndx[:, None], sorted_indices]
 
-        sorted_x_ng_rowwise = x_ng[ndx[:, None], sorted_indices]
-        # Convert gene expression values to Long type for tokenization
-        token_type_ids = sorted_x_ng_rowwise.long()
+        attention_mask = sorted_x_ng != 0
 
-        # Now stack the tokens and the gene expression values
-        combined_input_ids = torch.stack((input_ids, token_type_ids), dim=-1).view(x_ng.shape[0], -1)
+        # pad genes with zero expression
+        input_ids[~attention_mask] = 0
 
-        attention_mask = sorted_x_ng_rowwise != 0
-        attention_mask = torch.repeat_interleave(attention_mask, 2, dim=-1)  # Adjusted for combined input
+        # Dynamic binning based on min and max values in the data
+        min_val, max_val = sorted_x_ng.min(), sorted_x_ng.max()
+        num_bins = input_ids.max().item() + 1  # adjust as necessary
+        bin_width = (max_val - min_val) / num_bins
+        sorted_x_ng_binned = ((sorted_x_ng - min_val) / bin_width).floor().long()
+        sorted_x_ng_binned.clamp_(0, num_bins-1)  # ensure the maximum bin index does not exceed num_bins-1
 
-        return combined_input_ids, attention_mask
+        # Ensure token_type_ids have the same size as input_ids
+        token_type_ids = sorted_x_ng_binned.expand_as(input_ids)
+
+        print(input_ids)
+        print("Input IDs: max", input_ids.max().item(), "min", input_ids.min().item())
+        print("Token Type IDs: max", token_type_ids.max().item(), "min", token_type_ids.min().item())
+        return input_ids, token_type_ids, attention_mask
 
 
 
@@ -85,17 +94,18 @@ class llomics(BaseModule, PredictMixin):
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        combined_input_ids, attention_mask = self.tokenize(x_ng, feature_list)
+        input_ids, token_type_ids, attention_mask = self.tokenize(x_ng, feature_list)
 
-        labels = combined_input_ids.clone()
+        labels = input_ids.clone()
         labels_probs = torch.full(labels.shape, self.mlm_probability, device=x_ng.device)
         labels_probs[~attention_mask] = 0
         masked_indices = torch.bernoulli(labels_probs).bool()
-        labels[~masked_indices] = -100  # we only compute loss on masked tokens
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8, device=x_ng.device)).bool() & masked_indices
-        combined_input_ids[indices_replaced] = 1  # tokenizer.mask_token_id
+        input_ids[indices_replaced] = 1  # tokenizer.mask_token_id
+        token_type_ids[indices_replaced] = 0  # Setting the corresponding token_type_ids to 0 for masked positions
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = (
@@ -103,13 +113,15 @@ class llomics(BaseModule, PredictMixin):
             & masked_indices
             & ~indices_replaced
         )
-        random_words = torch.randint(2 * x_ng.shape[1], labels.shape, dtype=torch.long, device=x_ng.device)  # Notice the change in the randint size
-        combined_input_ids[indices_random] = random_words[indices_random]
+        random_words = torch.randint(len(self.feature_schema) + 2, labels.shape, dtype=torch.long, device=x_ng.device)
+        input_ids[indices_random] = random_words[indices_random]
+        token_type_ids[indices_random] = 0  # Setting the corresponding token_type_ids to 0 for random replacement positions
 
         output = self.model(
-            input_ids=combined_input_ids,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,  # Passing token_type_ids to the BERT model
             attention_mask=attention_mask,
-            labels=labels,
+            labels=labels
         )
         return output.loss
 
@@ -128,12 +140,14 @@ class llomics(BaseModule, PredictMixin):
         if self.transform is not None:
             x_ng = self.transform(x_ng)
 
-        combined_input_ids, attention_mask = self.tokenize(x_ng, feature_list)
+        input_ids, token_type_ids, attention_mask = self.tokenize(x_ng, feature_list)
 
         output = self.model(
-            input_ids=combined_input_ids,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,  # Included token_type_ids as per your request
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
         return output
+
